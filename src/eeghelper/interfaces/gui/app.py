@@ -39,6 +39,7 @@ import flet as ft
 from eeghelper.excecoes import ErroEEGHelper
 from eeghelper.interfaces.gui import espera, marca, tabela, tema
 from eeghelper.interfaces.gui.estado import EstadoLote, Fase
+from eeghelper.interfaces.gui.transicao import Revelar
 from eeghelper.io_.escritor_eventlist import NOME_RELATORIO_PADRAO, escrever_relatorio
 from eeghelper.io_.leitor_marcadores import ler_marcadores
 from eeghelper.servicos.substituicao import gravar_previas, verificar_par
@@ -545,9 +546,11 @@ class Bancada:
 
         # Colunas de largura igual: as cifras caem nas mesmas três posições antes
         # e depois da verificação, então a troca de fase não reflui o cartão.
+        # `Revelar` assenta a leitura nova porque este cartão só se refaz numa
+        # medição de verdade (ver `atualizar`), nunca num remonte de tema.
         return self._cartao(
             "leitura",
-            ft.Row(spacing=tema.ESPACO_3, controls=leituras),
+            Revelar(ft.Row(spacing=tema.ESPACO_3, controls=leituras)),
         )
 
     def _tela_em_branco(self) -> ft.Control:
@@ -694,15 +697,18 @@ class Bancada:
                             bgcolor=cor_ponto,
                             border_radius=tema.RAIO_PILULA,
                             margin=ft.Margin.only(top=5),
+                            animate=tema.animacao(tema.MS_RAPIDO),
                         ),
                         ft.Container(
                             expand=True,
-                            content=ft.Text(
-                                mensagem,
-                                size=tema.CORPO,
-                                color=cor.texto_medio,
-                                font_family=tema.FAMILIA_TEXTO,
-                                font_family_fallback=tema.FALLBACK_TEXTO,
+                            content=Revelar(
+                                ft.Text(
+                                    mensagem,
+                                    size=tema.CORPO,
+                                    color=cor.texto_medio,
+                                    font_family=tema.FAMILIA_TEXTO,
+                                    font_family_fallback=tema.FALLBACK_TEXTO,
+                                )
                             ),
                         ),
                     ],

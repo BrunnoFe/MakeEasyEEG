@@ -21,7 +21,7 @@ alvo pelos códigos da coluna do participante correspondente.
   primeiro evento real.
 - **Pareamento posicional:** a n-ésima ocorrência do `ecode` alvo recebe o
   n-ésimo código da planilha.
-- **`ecode` alvo configurável** (`--ecode-alvo`, padrão `1`).
+- **`ecode` alvo configurável** (campo "marcador procurado" na janela, padrão `1`).
 - **O original nunca é sobrescrito.** Sai um `<nome>_corrigido.txt` mais um
   `relatorio_substituicoes.csv` com uma linha por troca.
 - **Contagem incompatível aborta aquele participante** e o erro é reportado ao
@@ -42,11 +42,10 @@ event;B0001;B0002;B0003
 ## Uso
 
 ```bash
-# Interface desktop (Flet)
+# Interface desktop (Flet) — três formas equivalentes de abrir a mesma janela
 uv run eeghelper-gui
-
-# Equivalente, executando o script na raiz do projeto
 uv run python main.py
+uv run python -m eeghelper
 ```
 
 O mapeamento `auto` extrai o ID do nome do arquivo (`B0002_eventos.txt` →
@@ -88,5 +87,5 @@ O serviço separa o cálculo da escrita:
 A interface desktop exige a verificação: a gravação só destrava depois dela, e
 qualquer mudança nas entradas descarta a prévia e trava tudo de novo.
 
-Ver `docs/tutorial-projeto-python-uv.md` para o passo a passo de criação do
-repositório.
+Ver `docs/notas/tutorial-projeto-python-uv.md` (local, não versionado) para o
+passo a passo de criação do repositório.
