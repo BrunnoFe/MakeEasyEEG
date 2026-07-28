@@ -1,0 +1,31 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+#personal
+eventlists/
+*.csv
+docs/agents/
+docs/notas/
+
+#IA
+.claude
+
+# Saídas geradas pelo EEGHelper
+*_corrigido.txt
+relatorio_substituicoes.csv
+saida/
+saida_teste/
+
+# Ferramentas
+.pytest_cache/
+.ruff_cache/
+.scratch/
+.impeccable/

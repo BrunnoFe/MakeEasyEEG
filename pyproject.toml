@@ -1,0 +1,39 @@
+[project]
+name = "eeghelper"
+version = "0.1.0"
+description = "Corrige os marcadores (ecode) de eventlists do ERPLAB a partir de uma planilha de identificação por participante."
+readme = "README.md"
+authors = [
+    { name = "BrunnoFe", email = "brunofelipemuniz.contato@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "flet[desktop]>=0.28.3",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.5",
+]
+
+[project.scripts]
+eeghelper = "eeghelper.interfaces.cli:main"
+eeghelper-gui = "eeghelper.interfaces.gui.app:main"
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "PTH"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
