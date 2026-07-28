@@ -1,8 +1,8 @@
 """Exceções específicas do EEGHelper.
 
-Ter uma hierarquia própria permite que a CLI e a futura GUI em Flet tratem
-falhas de negócio (planilha incompatível, participante ausente) de forma
-diferente de erros de programação.
+Ter uma hierarquia própria permite que a interface trate falhas de negócio
+(planilha incompatível, participante ausente) de forma diferente de erros de
+programação.
 """
 
 from __future__ import annotations

@@ -14,7 +14,6 @@ dependencies = [
 ]
 
 [project.scripts]
-eeghelper = "eeghelper.interfaces.cli:main"
 eeghelper-gui = "eeghelper.interfaces.gui.app:main"
 
 [build-system]

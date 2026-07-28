@@ -127,9 +127,9 @@ class PreviaParticipante:
     desalinhado, então ele precisa ver o resultado — inclusive a posição exata
     de uma divergência de contagem — enquanto ainda dá para desistir.
 
-    Diferente de `processar_lote`, um participante que falha não vira exceção
-    nem some do resultado: ele fica aqui com `erro` preenchido, porque a fita
-    dele ainda precisa ser desenhada na tela.
+    Um participante que falha não vira exceção nem some do resultado: ele fica
+    aqui com `erro` preenchido, porque a fita dele ainda precisa ser desenhada
+    na tela.
 
     Attributes:
         total_eventos: eventos reais do eventlist (boundaries já excluídos).

@@ -1,4 +1,4 @@
-"""Permite executar o pacote com `python -m eeghelper`."""
+"""Permite executar a GUI do EEGHelper com `python main.py`."""
 
 from eeghelper.interfaces.gui.app import main
 

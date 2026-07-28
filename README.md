@@ -45,21 +45,12 @@ event;B0001;B0002;B0003
 # Interface desktop (Flet)
 uv run eeghelper-gui
 
-# Tudo por diálogo gráfico (Tkinter)
-uv run eeghelper
-
-# Lote, sem diálogos
-uv run eeghelper --eventlists eventlists --marcadores marcadores.csv --saida saida
-
-# Outro ecode alvo e mapeamento manual arquivo -> coluna
-uv run eeghelper --ecode-alvo 2 --mapeamento manual
+# Equivalente, executando o script na raiz do projeto
+uv run python main.py
 ```
 
 O mapeamento `auto` extrai o ID do nome do arquivo (`B0002_eventos.txt` →
 coluna `B0002`); o que não casar é perguntado ao usuário.
-
-Código de saída: `0` tudo certo, `1` entrada inválida/cancelada, `2` algum
-participante falhou.
 
 ## Desenvolvimento
 
@@ -80,12 +71,10 @@ src/eeghelper/
 ├── io_/               # leitura/escrita de eventlist e planilha
 ├── servicos/          # mapeamento e substituição (regra de negócio pura)
 └── interfaces/
-    ├── cli.py         # linha de comando (argparse)
-    ├── dialogos.py    # diálogos de arquivo (Tkinter)
     └── gui/           # janela desktop (Flet)
 ```
 
-`servicos` e `dominio` não conhecem Flet, Tkinter nem `argparse`.
+`servicos` e `dominio` não conhecem Flet.
 
 ### Verificar antes de gravar
 
@@ -96,9 +85,8 @@ O serviço separa o cálculo da escrita:
   `ecode` alvo e o ponto exato onde as contagens divergem;
 - `gravar_previas` grava só as prévias que a verificação aprovou.
 
-`processar_lote` (usado pela CLI) é a composição das duas. A interface desktop
-exige a verificação: a gravação só destrava depois dela, e qualquer mudança nas
-entradas descarta a prévia e trava tudo de novo.
+A interface desktop exige a verificação: a gravação só destrava depois dela, e
+qualquer mudança nas entradas descarta a prévia e trava tudo de novo.
 
 Ver `docs/tutorial-projeto-python-uv.md` para o passo a passo de criação do
 repositório.

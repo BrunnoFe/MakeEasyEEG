@@ -163,38 +163,3 @@ def gravar_previas(
         relatorios.append(previa.relatorio)
 
     return relatorios, falhas
-
-
-def processar_par(
-    par: ParEventlistParticipante,
-    marcadores: TabelaMarcadores,
-    config: ConfiguracaoSubstituicao,
-) -> RelatorioSubstituicao:
-    """Executa o fluxo completo de um participante: ler, substituir e gravar.
-
-    Raises:
-        ErroEEGHelper: qualquer falha de negócio da verificação.
-    """
-    previa = verificar_par(par, marcadores, config)
-    if previa.erro is not None:
-        raise previa.erro
-
-    relatorios, _ = gravar_previas([previa])
-    return relatorios[0]
-
-
-def processar_lote(
-    pares: list[ParEventlistParticipante],
-    marcadores: TabelaMarcadores,
-    config: ConfiguracaoSubstituicao,
-) -> tuple[list[RelatorioSubstituicao], dict[Path, ErroEEGHelper]]:
-    """Processa vários participantes, isolando a falha de um dos demais.
-
-    Um participante com planilha incompatível não deve impedir a correção dos
-    outros — daí a coleta de falhas em vez de propagar a primeira exceção.
-
-    Returns:
-        Os relatórios bem-sucedidos e um dicionário arquivo -> erro para os que
-        falharam.
-    """
-    return gravar_previas(verificar_lote(pares, marcadores, config))
