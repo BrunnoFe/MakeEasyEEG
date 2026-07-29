@@ -16,10 +16,16 @@ from pathlib import Path
 import flet as ft
 from eeghelper.dominio.modelos import PreviaParticipante
 from eeghelper.interfaces.gui import tema, traco
+from eeghelper.interfaces.gui.transicao import Revelar
 
 LARGURA_MARCADOR = 14
-LARGURA_PARTICIPANTE = 116
-LARGURA_CONTAGEM = 104
+# As duas colunas fixas são medidas pelo conteúdo mais largo que cabe nelas, e
+# não arredondadas para cima: o nome do eventlist é a ÚNICA coluna elástica da
+# grade, então cada pixel folgado aqui sai do identificador da linha — e é ele
+# que o usuário lê para saber de qual arquivo a linha fala. Participante cabe o
+# dropdown "preencher" (~90); contagem cabe "128 / 130" em Consolas 13 (~64).
+LARGURA_PARTICIPANTE = 104
+LARGURA_CONTAGEM = 88
 
 
 def cifra(valor: str, cor: str | None = None, negrito: bool = False) -> ft.Text:
@@ -47,6 +53,9 @@ def rotulo(texto_: str, cor: str | None = None) -> ft.Text:
         weight=ft.FontWeight.W_600,
         style=ft.TextStyle(letter_spacing=tema.TRACKING_ROTULO),
         no_wrap=True,
+        # Como `texto()`: um rótulo que não coube deve terminar em elipse, e não
+        # ser cortado no meio do glifo. Não muda nada enquanto ele couber.
+        overflow=ft.TextOverflow.ELLIPSIS,
     )
 
 
@@ -117,7 +126,7 @@ def cabecalho() -> ft.Control:
             participante=rotulo("participante"),
             arquivo=rotulo("eventlist"),
             fita=rotulo("traço de eventos"),
-            contagem=rotulo("alvos / códigos"),
+            contagem=rotulo("alvos / cód."),
         ),
     )
 
@@ -168,6 +177,26 @@ def _celula_participante(
     )
 
 
+def _amplitude_do_pulso(
+    foco_pulso: str | None, previa: PreviaParticipante | None, lote_limpo: bool
+) -> float | None:
+    """O deslocamento do assentamento do marcador ao fim de uma verificação ou
+    gravação: cheio quando o lote não tem nada a esconder, contido quando tem
+    — e a divergência sempre recebe o cheio, mesmo num lote sujo, porque é
+    exatamente o que "errar alto, nunca quieto" pede para destacar.
+    """
+    if foco_pulso is None or previa is None:
+        return None
+    if foco_pulso == "verificacao":
+        divergente = not previa.gravavel
+        if lote_limpo or divergente:
+            return tema.DESLOCAMENTO_PULSO_CHEIO
+        return tema.DESLOCAMENTO_PULSO_CONTIDO
+    if foco_pulso == "gravacao" and previa.gravavel:
+        return tema.DESLOCAMENTO_PULSO_CHEIO if lote_limpo else tema.DESLOCAMENTO_PULSO_CONTIDO
+    return None
+
+
 def linha(
     caminho: Path,
     participante: str | None,
@@ -175,12 +204,21 @@ def linha(
     verificado: bool,
     colunas: list[str],
     ao_escolher: Callable[[Path, str | None], None],
+    foco_pulso: str | None = None,
+    lote_limpo: bool = True,
 ) -> ft.Control:
-    """Uma linha de participante, com realce em pastilha ao pairar o cursor."""
+    """Uma linha de participante, com realce em pastilha ao pairar o cursor.
+
+    `foco_pulso` só chega diferente de `None` no exato render em que uma
+    verificação ou gravação acabou de terminar (ver `Bancada._tela`); em
+    qualquer outro redesenho o marcador nasce já no estado final, sem
+    assentar — do contrário o pulso replicaria a cada rolagem da lista.
+    """
     cor = tema.paleta()
     pulado = participante is None
     cor_estado = traco.cor_do_estado(previa, verificado, pulado)
     decidido = pulado or (verificado and previa is not None)
+    amplitude_pulso = None if pulado else _amplitude_do_pulso(foco_pulso, previa, lote_limpo)
 
     if previa is not None:
         divergente = verificado and not previa.gravavel
@@ -199,6 +237,10 @@ def linha(
     # chama o olho num lote de duzentos arquivos.
     repouso = ft.Colors.with_opacity(0.06, cor.pulado) if pulado else ft.Colors.TRANSPARENT
 
+    marcador: ft.Control = _marcador_de_canal(cor_estado, aceso=decidido)
+    if amplitude_pulso is not None:
+        marcador = Revelar(marcador, deslocamento=amplitude_pulso)
+
     fundo = ft.Container(
         height=tema.ALTURA_LINHA,
         bgcolor=repouso,
@@ -207,7 +249,7 @@ def linha(
         margin=ft.Margin.symmetric(horizontal=tema.MARGEM_LINHA),
         animate=tema.animacao(tema.MS_RAPIDO),
         content=_grade(
-            marcador=_marcador_de_canal(cor_estado, aceso=decidido),
+            marcador=marcador,
             participante=_celula_participante(caminho, participante, colunas, ao_escolher),
             arquivo=texto(caminho.name, cor.texto_fraco if pulado else cor.texto_medio),
             fita=conteudo_traco,

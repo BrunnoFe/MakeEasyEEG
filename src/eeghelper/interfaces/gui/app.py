@@ -51,19 +51,20 @@ EXTENSOES_PLANILHA = ["csv", "xlsx", "xlsm", "xls"]
 ALTURA_CAMPO_ECODE = 34
 ALTURA_BOTAO = 42
 
-# Três colunas de leitura de largura igual, medidas a partir da coluna de
-# controle: nesta versão do Flet um Container intermediário não repassa a
-# largura resolvida, e nem `expand` nem `STRETCH` chegam até aqui — o Row de
-# cifras colapsava para altura zero e as ações eram desenhadas sobre o cartão.
-# Escrever a medida é o que mantém as cifras nas mesmas três posições antes e
-# depois da verificação.
-COLUNAS_DE_LEITURA = 3
-LARGURA_LEITURA = (
-    tema.LARGURA_COLUNA_CONTROLE
-    - 2 * (tema.ESPACO_4 + 2)  # padding do cartão
-    - 2  # as duas bordas de 1 px
-    - (COLUNAS_DE_LEITURA - 1) * tema.ESPACO_3  # as calhas entre colunas
-) // COLUNAS_DE_LEITURA
+# Três compartimentos de largura escrita: a régua passa de duas leituras para
+# três ao verificar, e sem posição fixa a cifra de divergentes apareceria
+# deslocada de onde o olho acabou de ler "sem coluna". A medida vem do rótulo
+# mais largo (PARTICIPANTES ≈ 95 px em 10.5/1.3) mais a cifra deitada ao lado.
+LARGURA_LEITURA = 190
+CALHA_LEITURA = tema.ESPACO_6
+# O recuo mínimo da régua, herdado da margem das linhas da tabela: as leituras
+# ficam centradas na largura do painel, e este recuo só existe para que elas
+# nunca encostem na borda numa janela estreita.
+RECUO_REGUA = tema.CALHA_TABELA + tema.MARGEM_LINHA
+
+# A cifra sem medida: o mesmo travessão que a tabela usa para contagem
+# desconhecida, em vez de um zero que tem cara de dado.
+SEM_MEDIDA = "—"
 
 
 def plural(quantidade: int, singular: str, plural_: str) -> str:
@@ -127,11 +128,23 @@ def _campo(nome: str, valor: ft.Control, acoes: list[ft.Control]) -> ft.Control:
 
 
 def _leitura(valor: str, nome: str, cor_valor: str) -> ft.Control:
-    """Um mostrador do painel de medição: a cifra grande sobre a placa gravada."""
-    return ft.Column(
+    """Um mostrador da régua: a cifra grande e a placa gravada ao lado dela.
+
+    Deitado, e não empilhado: a régua é uma faixa dentro do painel, e cada
+    linha que ela ganha sai da tabela. O rótulo desce 6 px porque a caixa de
+    uma cifra de 28 px é bem mais alta que a de um versalete de 10.5, e
+    centralizar as duas deixaria o rótulo pairando acima da base da cifra.
+
+    O par fica centrado no compartimento, e não encostado à esquerda dele: a
+    régua inteira é centrada no painel, e um compartimento com a folga toda de
+    um lado só puxaria o centro óptico do conjunto para o lado contrário.
+    """
+    return ft.Row(
         width=LARGURA_LEITURA,
         tight=True,
-        spacing=5,
+        spacing=tema.ESPACO_2,
+        alignment=ft.MainAxisAlignment.CENTER,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
         controls=[
             ft.Text(
                 valor,
@@ -142,7 +155,7 @@ def _leitura(valor: str, nome: str, cor_valor: str) -> ft.Control:
                 font_family_fallback=tema.FALLBACK_CIFRA,
                 no_wrap=True,
             ),
-            tabela.rotulo(nome),
+            ft.Container(margin=ft.Margin.only(top=6), content=tabela.rotulo(nome)),
         ],
     )
 
@@ -194,7 +207,7 @@ def _botao(
     # nem por `expand` numa Row nem pelo `STRETCH` da coluna — nos dois casos ele
     # encolhe para uma caixa menor que o rótulo, e o texto vaza para fora dela.
     botao = ft.Container(
-        width=tema.LARGURA_COLUNA_CONTROLE,
+        width=tema.LARGURA_CARTAO_CONTROLE,
         height=ALTURA_BOTAO,
         bgcolor=fundo,
         gradient=None
@@ -245,6 +258,10 @@ class Bancada:
         self.seletor = ft.FilePicker()
         page.services.append(self.seletor)
         self.total_a_verificar = 0
+        # Só "verificacao" ou "gravacao" no exato `atualizar()` que fecha uma
+        # verificação ou uma gravação — é o que faz o pulso dos marcadores de
+        # canal (ver `tabela.linha`) tocar uma vez, não a cada redesenho.
+        self._foco_pulso: str | None = None
 
     # --- Montagem --------------------------------------------------------
 
@@ -259,12 +276,12 @@ class Bancada:
         self.area_tela = ft.Container(expand=True)
         # As duas áreas nascem preenchidas, e não vazias para receber conteúdo
         # depois do `page.add`: um Row que chega numa árvore já montada não
-        # refaz o próprio layout, e era isso que deixava o cartão de leitura com
+        # refaz o próprio layout, e era isso que deixava a régua de leitura com
         # o rótulo mas sem as cifras.
         self.area_leitura = ft.Column(
             spacing=0,
             horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-            controls=[self._cartao_de_leitura()],
+            controls=[self._regua_de_leitura()],
         )
         self.area_acoes = ft.Column(
             spacing=0,
@@ -360,6 +377,7 @@ class Bancada:
                     # A pista da barra fica visível sempre, em painel_alto: sem ela
                     # o cabeçalho salta 3 px quando a verificação começa.
                     ft.Container(bgcolor=cor.painel_alto, content=self.varredura),
+                    self.area_leitura,
                     tabela.cabecalho(),
                     self.area_tela,
                 ],
@@ -367,30 +385,43 @@ class Bancada:
         )
 
     def _coluna_de_controle(self) -> ft.Control:
-        """Aquisição e leitura rolam; as ações ficam ancoradas ao pé.
+        """Configurar em cima, agir ao pé — e nada rolando em uso normal.
 
-        Numa janela baixa a soma dos cartões passa da altura disponível, e uma
-        coluna única empurraria o botão que grava para fora da tela — a ação
-        mais consequente da janela seria a primeira a sumir.
+        Com a leitura movida para a régua do painel, os dois blocos que sobram
+        cabem inteiros na janela mínima. A rolagem do primeiro fica só como rede
+        de segurança para janelas abaixo do mínimo ou fonte de sistema ampliada;
+        se ela precisar disparar, é a configuração que cede, não as ações — os
+        botões são o que a janela pede a seguir, e sumir com eles para mostrar
+        um campo de arquivo seria trocar o destino pelo caminho.
 
         A largura mora na própria Column, e não num Container em volta: dentro
         de um Container o `expand` dos filhos não vale, e sem ele nem a altura
-        chegava à parte rolável — o cartão de leitura colapsava e as ações eram
-        desenhadas por cima dele.
+        chega à parte rolável — o bloco colapsa e as ações são desenhadas por
+        cima dele.
+
+        Os dois blocos recebem a MESMA largura escrita, em vez de esticarem até
+        a borda da coluna: só o primeiro rola, e uma barra de rolagem que come
+        largura de layout deixaria o cartão de aquisição mais estreito que as
+        ações logo abaixo dele. Com a largura escrita, a calha de
+        `CALHA_ROLAGEM` à direita absorve a barra — apareça ela por cima do
+        conteúdo ou ao lado, as duas bordas direitas coincidem nos dois casos.
         """
         return ft.Column(
             width=tema.LARGURA_COLUNA_CONTROLE,
             spacing=tema.ESPACO_4,
-            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
             controls=[
                 ft.Column(
                     spacing=tema.ESPACO_4,
                     expand=True,
                     scroll=ft.ScrollMode.AUTO,
-                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-                    controls=[self._cartao_de_aquisicao(), self.area_leitura],
+                    controls=[
+                        ft.Container(
+                            width=tema.LARGURA_CARTAO_CONTROLE,
+                            content=self._cartao_de_aquisicao(),
+                        )
+                    ],
                 ),
-                self.area_acoes,
+                ft.Container(width=tema.LARGURA_CARTAO_CONTROLE, content=self.area_acoes),
             ],
         )
 
@@ -517,8 +548,19 @@ class Bancada:
             ),
         )
 
-    def _cartao_de_leitura(self) -> ft.Control:
-        """O painel de medição: o que a varredura mediu, em cifras grandes."""
+    def _regua_de_leitura(self) -> ft.Control:
+        """O painel de medição: o que a varredura mediu, em cifras grandes.
+
+        Mora dentro do painel da tela, entre a pista da varredura e o cabeçalho
+        de colunas, e não na coluna de controle: as cifras resumem a tabela, e
+        na lateral elas disputavam altura com a configuração — os três cartões
+        somados passavam da janela, e o de aquisição acabava cortado por uma
+        rolagem sem barra visível, que lia como um cartão por cima do outro.
+
+        Não é um cartão. Sem contorno, sem raio e sem sombra, em `painel_alto`:
+        é a mesma cor da pista logo acima, então as duas fundem num bloco de
+        cabeçalho só, e a borda inferior é a mesma que `tabela.cabecalho` usa.
+        """
         estado = self.estado
         cor = tema.paleta()
         verificado = estado.fase in (Fase.VERIFICADO, Fase.GRAVADO)
@@ -535,22 +577,40 @@ class Bancada:
             ]
         else:
             total_pares = len(estado.pares())
-            leituras = [
-                _leitura(str(total_pares), "participantes", cor.texto),
-                _leitura(
-                    str(estado.total_pulados),
-                    "sem coluna",
-                    cor.pulado if estado.total_pulados else cor.texto_fraco,
-                ),
-            ]
+            # Antes de haver lote não há o que medir, e um zero grande numa
+            # tela que está pedindo os arquivos é ruído com cara de dado. O
+            # travessão é o que a tabela já escreve para contagem desconhecida.
+            if total_pares:
+                leituras = [
+                    _leitura(str(total_pares), "participantes", cor.texto),
+                    _leitura(
+                        str(estado.total_pulados),
+                        "sem coluna",
+                        cor.pulado if estado.total_pulados else cor.texto_fraco,
+                    ),
+                ]
+            else:
+                leituras = [
+                    _leitura(SEM_MEDIDA, "participantes", cor.texto_fraco),
+                    _leitura(SEM_MEDIDA, "sem coluna", cor.texto_fraco),
+                ]
 
-        # Colunas de largura igual: as cifras caem nas mesmas três posições antes
-        # e depois da verificação, então a troca de fase não reflui o cartão.
-        # `Revelar` assenta a leitura nova porque este cartão só se refaz numa
-        # medição de verdade (ver `atualizar`), nunca num remonte de tema.
-        return self._cartao(
-            "leitura",
-            Revelar(ft.Row(spacing=tema.ESPACO_3, controls=leituras)),
+        # Compartimentos de largura escrita, centrados no painel: a cifra não
+        # muda de posição quando o número ganha um dígito, e a folga sobra
+        # simétrica dos dois lados em vez de toda à direita. `Revelar` assenta
+        # a leitura nova porque a régua só se refaz numa medição de verdade
+        # (ver `atualizar`), nunca num remonte de tema.
+        return ft.Container(
+            bgcolor=cor.painel_alto,
+            padding=ft.Padding.symmetric(horizontal=RECUO_REGUA, vertical=tema.ESPACO_3 + 2),
+            border=ft.Border(bottom=ft.BorderSide(width=1, color=cor.contorno)),
+            content=Revelar(
+                ft.Row(
+                    spacing=CALHA_LEITURA,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    controls=leituras,
+                )
+            ),
         )
 
     def _tela_em_branco(self) -> ft.Control:
@@ -632,6 +692,7 @@ class Bancada:
         por_caminho = {par.caminho_eventlist: par.participante for par in estado.pares()}
         previa_por_caminho = {previa.caminho_entrada: previa for previa in estado.previas}
         verificado = estado.fase in (Fase.VERIFICADO, Fase.GRAVADO)
+        lote_limpo = estado.total_divergente == 0
 
         linhas = [
             tabela.linha(
@@ -641,6 +702,8 @@ class Bancada:
                 verificado=verificado,
                 colunas=colunas,
                 ao_escolher=self._ao_escolher_coluna,
+                foco_pulso=self._foco_pulso,
+                lote_limpo=lote_limpo,
             )
             for caminho in estado.caminhos_eventlists
         ]
@@ -743,7 +806,7 @@ class Bancada:
 
     def atualizar(self) -> None:
         self.area_tela.content = self._tela()
-        self.area_leitura.controls = [self._cartao_de_leitura()]
+        self.area_leitura.controls = [self._regua_de_leitura()]
         self.area_acoes.controls = [self._acoes()]
         self._atualizar_varredura()
         self.page.update()
@@ -875,7 +938,9 @@ class Bancada:
             self.page.update()
 
         estado.registrar_previas(previas)
+        self._foco_pulso = "verificacao"
         self.atualizar()
+        self._foco_pulso = None
 
     async def _gravar(self, _evento: ft.Event[ft.Control]) -> None:
         estado = self.estado
@@ -896,7 +961,9 @@ class Bancada:
 
         logger.info("%d gerados, %d falharam", len(relatorios), len(falhas))
         estado.registrar_gravacao(caminho_relatorio)
+        self._foco_pulso = "gravacao"
         self.atualizar()
+        self._foco_pulso = None
 
 
 async def _principal(page: ft.Page) -> None:
@@ -905,7 +972,7 @@ async def _principal(page: ft.Page) -> None:
     page.window.min_width = tema.LARGURA_MINIMA_JANELA
     page.window.min_height = tema.ALTURA_MINIMA_JANELA
     page.window.width = 1280
-    page.window.height = 720
+    page.window.height = 768
     # Nenhuma fonte é registrada: a cifra é a monoespaçada do sistema
     # (`tema.FAMILIA_CIFRA` e seus fallbacks), e a janela não faz requisição de
     # rede para desenhar.

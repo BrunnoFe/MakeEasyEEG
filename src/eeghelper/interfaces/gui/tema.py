@@ -160,6 +160,13 @@ LARGURA_TRACO = 380
 ALTURA_TRACO = 20
 LARGURA_COLUNA_CONTROLE = 308
 
+# A coluna de controle tem um bloco que rola (a aquisição) e dois que não (a
+# leitura e as ações). Os três são desenhados nesta largura menor, e a calha que
+# sobra à direita é onde a barra de rolagem cabe — sem ela, o único bloco rolável
+# ficaria mais estreito que os outros dois e as bordas direitas não fechariam.
+CALHA_ROLAGEM = 10
+LARGURA_CARTAO_CONTROLE = LARGURA_COLUNA_CONTROLE - CALHA_ROLAGEM
+
 # A grade da tabela. Cabeçalho e linha usam OS DOIS valores, iguais: a linha
 # tem margem lateral porque o realce de hover é uma pastilha arredondada, e o
 # cabeçalho precisa da mesma margem ou cada rótulo cai deslocado da sua coluna.
@@ -175,6 +182,15 @@ MS_TRANSICAO = 220
 MS_VARREDURA = 1900  # ida da luz de espera na fita vazia
 CURVA = ft.AnimationCurve.EASE_OUT_CUBIC
 CURVA_VARREDURA = ft.AnimationCurve.EASE_IN_OUT_SINE
+
+# Deslocamento vertical (fração da altura do controle) do assentamento de
+# `Revelar`. O padrão serve a cifras e mensagens; os dois extremos servem ao
+# pulso dos marcadores de canal no instante em que uma verificação ou
+# gravação termina — cheio quando o lote saiu limpo, contido quando não saiu,
+# porque o instrumento nunca comemora um lote com divergência.
+DESLOCAMENTO_REVELAR = 0.06
+DESLOCAMENTO_PULSO_CHEIO = 0.14
+DESLOCAMENTO_PULSO_CONTIDO = 0.03
 
 
 def animacao(ms: int = MS_TRANSICAO) -> ft.Animation:
