@@ -16,8 +16,9 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 
-from eeghelper.config import SUFIXO_SAIDA_PADRAO, ConfiguracaoSubstituicao
+from eeghelper.config import EXTENSAO_CSV, NOME_RELATORIO_PADRAO, ConfiguracaoSubstituicao
 from eeghelper.dominio.modelos import PreviaParticipante
+from eeghelper.dominio.nomes import PADRAO_SAIDA_PADRAO, validar_padrao
 from eeghelper.io_.leitor_marcadores import TabelaMarcadores
 from eeghelper.servicos.mapeamento import ParEventlistParticipante, mapear_automaticamente
 
@@ -41,7 +42,13 @@ class EstadoLote:
     caminho_marcadores: Path | None = None
     pasta_saida: Path | None = None
     ecode_alvo: int = 1
-    sufixo_saida: str = SUFIXO_SAIDA_PADRAO
+    # Nenhum destes é persistido entre sessões, e isso é deliberado: um padrão
+    # "manter o nome original" que sobrevivesse ao fechamento voltaria armado na
+    # próxima abertura, quando a pasta de saída já seria outra.
+    padrao_saida: str = PADRAO_SAIDA_PADRAO
+    gerar_relatorio: bool = True
+    nome_relatorio: str = NOME_RELATORIO_PADRAO
+    extensao_relatorio: str = EXTENSAO_CSV
 
     marcadores: TabelaMarcadores | None = None
     erro_marcadores: str | None = None
@@ -84,6 +91,31 @@ class EstadoLote:
     def definir_ecode_alvo(self, ecode: int) -> None:
         self.ecode_alvo = ecode
         self.invalidar_verificacao()
+
+    def definir_padrao_saida(self, padrao: str) -> None:
+        """Troca o padrão de nome. Invalida a verificação como toda entrada.
+
+        Obrigatório invalidar: `caminho_saida_previsto` é congelado em cada
+        prévia no momento da verificação, então prévias antigas descreveriam
+        arquivos que o padrão novo não geraria mais.
+        """
+        self.padrao_saida = padrao
+        self.invalidar_verificacao()
+
+    def definir_relatorio(
+        self, gerar: bool, nome: str | None = None, extensao: str | None = None
+    ) -> None:
+        """Liga/desliga o relatório de auditoria, nomeia e escolhe o formato.
+
+        Único ajuste que NÃO invalida a verificação: o relatório é escrito no
+        fim da gravação e não entra em nenhuma prévia, então mudá-lo não torna
+        obsoleto nada que o usuário já viu.
+        """
+        self.gerar_relatorio = gerar
+        if nome is not None:
+            self.nome_relatorio = nome
+        if extensao is not None:
+            self.extensao_relatorio = extensao
 
     def escolher_coluna(self, caminho: Path, participante: str | None) -> None:
         if participante:
@@ -156,6 +188,7 @@ class EstadoLote:
         return (
             self.fase in (Fase.PRONTO, Fase.VERIFICADO, Fase.GRAVADO)
             and self.entradas_completas
+            and self.erro_padrao_saida is None
             and bool(self.pares())
         )
 
@@ -185,9 +218,30 @@ class EstadoLote:
         return ConfiguracaoSubstituicao(
             ecode_alvo=self.ecode_alvo,
             pasta_saida=self.pasta_saida,
-            sufixo_saida=self.sufixo_saida,
+            padrao_saida=self.padrao_saida,
+            gerar_relatorio=self.gerar_relatorio,
+            nome_relatorio=self.nome_relatorio,
+            extensao_relatorio=self.extensao_relatorio,
             exigir_contagem_exata=True,
         )
+
+    @property
+    def erro_padrao_saida(self) -> str | None:
+        """Mensagem de recusa do padrão atual, ou None se ele serve."""
+        return validar_padrao(self.padrao_saida)
+
+    def caminho_saida_de(self, caminho: Path, participante: str) -> Path | None:
+        """O destino de um arquivo com a configuração em vigor, ou None se o
+        padrão está inválido.
+
+        A tabela chama isto a cada redesenho para mostrar o nome de saída ao
+        vivo — antes da verificação, inclusive. Deliberadamente NÃO lê
+        `previa.caminho_saida_previsto`, que só existe depois de verificar e
+        descreveria o padrão anterior enquanto o usuário digita o novo.
+        """
+        if self.erro_padrao_saida is not None:
+            return None
+        return self.configuracao().caminho_saida_para(caminho, participante)
 
     def pasta_do_relatorio(self) -> Path | None:
         """Onde o relatório deve cair: a pasta de saída ou a do primeiro arquivo."""

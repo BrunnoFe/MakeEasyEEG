@@ -26,3 +26,15 @@ class ParticipanteNaoEncontrado(ErroEEGHelper):
 
 class ContagemIncompativel(ErroEEGHelper):
     """Quantidade de ecodes alvo no .txt difere da quantidade de códigos na planilha."""
+
+
+class ColisaoDeNomeSaida(ErroEEGHelper):
+    """Dois ou mais eventlists do lote resolveram para o mesmo arquivo de saída.
+
+    Trava todos os envolvidos, nunca só os últimos: escolher qual sobrevive
+    seria arbitrário, e o usuário perderia os demais sem perceber.
+    """
+
+
+class SobrescritaRecusada(ErroEEGHelper):
+    """O usuário não autorizou substituir o eventlist original deste participante."""

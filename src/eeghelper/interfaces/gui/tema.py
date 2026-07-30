@@ -219,3 +219,50 @@ def brilho(cor_estado: str, forca: float = 0.45) -> ft.BoxShadow:
         color=ft.Colors.with_opacity(forca if paleta().escura else 0.0, cor_estado),
         offset=ft.Offset(0, 0),
     )
+
+
+# --- Menus suspensos -----------------------------------------------------
+# O menu de um dropdown é desenhado FORA do painel, numa camada própria: ele
+# não herda nem a cor nem o raio do cartão onde o campo mora. Sem estas duas
+# funções cada dropdown abre uma folha branca de Material padrão, quadrada e
+# com o azul de seleção do Flutter — o único ponto do instrumento que não fala
+# a língua do resto. As duas moram aqui, e não no controle, porque `app` e
+# `tabela` precisam da MESMA folha.
+
+ALTURA_MENU = 320
+
+
+def estilo_de_menu() -> ft.MenuStyle:
+    """A folha que se abre: mesma cor de painel, mesmo raio, borda de grade."""
+    cor = paleta()
+    return ft.MenuStyle(
+        bgcolor=cor.painel_alto,
+        shadow_color=cor.sombra_alta,
+        elevation=8,
+        padding=ft.Padding.all(ESPACO_1),
+        shape=ft.RoundedRectangleBorder(radius=RAIO_CHIP + 3),
+        side=ft.BorderSide(width=1, color=cor.graticule),
+    )
+
+
+def estilo_de_opcao() -> ft.ButtonStyle:
+    """Cada linha do menu: pastilha que acende no hover, como a linha da tabela.
+
+    O realce é `varrendo` a 14% — a mesma opacidade que `tabela` usa no hover
+    da linha —, e não o cinza padrão do Material: passar o mouse por uma opção
+    tem que ler igual a passar o mouse por um arquivo.
+    """
+    cor = paleta()
+    return ft.ButtonStyle(
+        color=cor.texto,
+        bgcolor={
+            ft.ControlState.HOVERED: ft.Colors.with_opacity(0.14, cor.varrendo),
+            ft.ControlState.FOCUSED: ft.Colors.with_opacity(0.14, cor.varrendo),
+            ft.ControlState.DEFAULT: ft.Colors.TRANSPARENT,
+        },
+        overlay_color=ft.Colors.with_opacity(0.10, cor.varrendo),
+        shape=ft.RoundedRectangleBorder(radius=RAIO_LINHA),
+        padding=ft.Padding.symmetric(horizontal=ESPACO_3, vertical=0),
+        text_style=ft.TextStyle(size=CORPO, font_family=FAMILIA_TEXTO),
+        animation_duration=MS_RAPIDO,
+    )

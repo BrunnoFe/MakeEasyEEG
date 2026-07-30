@@ -23,6 +23,7 @@ uma divergência, só a assinala (ver `tabela.linha`).
 from __future__ import annotations
 
 import flet as ft
+
 from eeghelper.interfaces.gui import tema
 
 

@@ -13,7 +13,12 @@ from eeghelper.dominio.modelos import (
     RelatorioSubstituicao,
     SubstituicaoAplicada,
 )
-from eeghelper.excecoes import ContagemIncompativel, ErroEEGHelper
+from eeghelper.excecoes import (
+    ColisaoDeNomeSaida,
+    ContagemIncompativel,
+    ErroEEGHelper,
+    SobrescritaRecusada,
+)
 from eeghelper.io_.escritor_eventlist import escrever_eventlist
 from eeghelper.io_.leitor_eventlist import ler_eventlist
 from eeghelper.io_.leitor_marcadores import TabelaMarcadores
@@ -104,7 +109,7 @@ def verificar_par(
     previa = PreviaParticipante(
         participante=par.participante,
         caminho_entrada=par.caminho_eventlist,
-        caminho_saida_previsto=config.caminho_saida_para(par.caminho_eventlist),
+        caminho_saida_previsto=config.caminho_saida_para(par.caminho_eventlist, par.participante),
     )
 
     try:
@@ -128,22 +133,94 @@ def verificar_par(
     return previa
 
 
+def marcar_colisoes(previas: list[PreviaParticipante]) -> None:
+    """Trava as prévias que disputam o mesmo arquivo de saída.
+
+    Colisão é propriedade do lote, não de um participante, então não cabe em
+    `verificar_par`: só depois de calcular todos os destinos dá para saber se
+    eles são distintos. Com o padrão de fábrica nunca são iguais — ele carrega o
+    nome do arquivo de entrada —, mas um padrão do usuário sem token variável
+    (`novos{ext}`) apontaria o lote inteiro para um arquivo só, e as gravações
+    se apagariam em cascata sem nenhum aviso.
+
+    Todos os envolvidos numa colisão são travados, e não todos menos um: gravar
+    "o primeiro" elegeria um sobrevivente arbitrário e o usuário perderia os
+    demais achando que o lote passou.
+    """
+    por_destino: dict[Path, list[PreviaParticipante]] = {}
+    for previa in previas:
+        por_destino.setdefault(previa.caminho_saida_previsto.resolve(), []).append(previa)
+
+    for destino, disputantes in por_destino.items():
+        if len(disputantes) < 2:
+            continue
+        nomes = ", ".join(previa.caminho_entrada.name for previa in disputantes)
+        logger.error("colisão de nome de saída em %s entre %s", destino.name, nomes)
+        for previa in disputantes:
+            # Não sobrescreve um erro anterior: a contagem incompatível que a
+            # verificação achou é mais específica e mais útil ao usuário do que
+            # "colidiu", e as duas travam a linha do mesmo jeito.
+            if previa.erro is None:
+                previa.erro = ColisaoDeNomeSaida(
+                    f"{len(disputantes)} eventlists gerariam {destino.name}: {nomes}"
+                )
+
+
 def verificar_lote(
     pares: list[ParEventlistParticipante],
     marcadores: TabelaMarcadores,
     config: ConfiguracaoSubstituicao,
 ) -> list[PreviaParticipante]:
     """Verifica o lote inteiro. Não cria, altera nem remove nenhum arquivo."""
-    return [verificar_par(par, marcadores, config) for par in pares]
+    previas = [verificar_par(par, marcadores, config) for par in pares]
+    marcar_colisoes(previas)
+    return previas
+
+
+def inspecionar_destinos(
+    previas: list[PreviaParticipante],
+) -> tuple[list[PreviaParticipante], list[Path]]:
+    """Separa o que a gravação apagaria, em duas categorias bem diferentes.
+
+    A checagem toca o disco e por isso deve rodar no instante da gravação, não
+    no da verificação: entre uma e outra o usuário pode ter mexido nas pastas
+    pelo explorador de arquivos, e um aviso calculado antes mentiria.
+
+    Returns:
+        Os participantes cujo destino é o próprio eventlist de entrada — perda
+        irreversível de dado bruto — e os demais caminhos já ocupados em disco,
+        que costumam ser a saída de uma rodada anterior sendo reprocessada.
+    """
+    originais: list[PreviaParticipante] = []
+    anteriores: list[Path] = []
+
+    for previa in previas:
+        if not previa.gravavel:
+            continue
+        destino = previa.caminho_saida_previsto
+        if destino.resolve() == previa.caminho_entrada.resolve():
+            originais.append(previa)
+        elif destino.exists():
+            anteriores.append(destino)
+
+    return originais, anteriores
 
 
 def gravar_previas(
     previas: list[PreviaParticipante],
+    permitir_sobrescrever_originais: bool = False,
 ) -> tuple[list[RelatorioSubstituicao], dict[Path, ErroEEGHelper]]:
     """Grava os eventlists corrigidos das prévias que a verificação aprovou.
 
     Prévias com `erro` são devolvidas como falhas sem tentativa de escrita: a
     verificação já decidiu que elas não podem ser gravadas.
+
+    Args:
+        permitir_sobrescrever_originais: autorização vinda da confirmação do
+            usuário. Sem ela, um participante cujo destino é o próprio arquivo
+            de entrada é marcado com `SobrescritaRecusada` e pulado — o restante
+            do lote grava normalmente, porque recusar destruir três originais
+            não é motivo para descartar os outros cento e noventa e sete.
 
     Returns:
         Os relatórios gravados e um dicionário arquivo -> erro para os demais.
@@ -158,7 +235,20 @@ def gravar_previas(
             continue
 
         assert previa.eventlist_corrigido is not None and previa.relatorio is not None
-        escrever_eventlist(previa.eventlist_corrigido, previa.caminho_saida_previsto)
+
+        e_o_original = previa.caminho_saida_previsto.resolve() == previa.caminho_entrada.resolve()
+        if e_o_original and not permitir_sobrescrever_originais:
+            previa.erro = SobrescritaRecusada(
+                f"substituir {previa.caminho_entrada.name} não foi autorizado"
+            )
+            falhas[previa.caminho_entrada] = previa.erro
+            continue
+
+        escrever_eventlist(
+            previa.eventlist_corrigido,
+            previa.caminho_saida_previsto,
+            permitir_sobrescrever_original=e_o_original,
+        )
         previa.relatorio.caminho_saida = previa.caminho_saida_previsto
         relatorios.append(previa.relatorio)
 

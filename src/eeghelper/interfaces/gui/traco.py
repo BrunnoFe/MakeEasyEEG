@@ -21,9 +21,9 @@ Camadas, de baixo para cima:
 
 from __future__ import annotations
 
+import flet as ft
 import flet.canvas as cv
 
-import flet as ft
 from eeghelper.dominio.modelos import PreviaParticipante
 from eeghelper.interfaces.gui import tema
 
